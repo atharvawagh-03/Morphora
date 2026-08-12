@@ -1,3 +1,6 @@
 opencv-python==4.10.0.84
 mediapipe>=0.10.30
 python-osc==1.9.0
+
+# Note: Python 3.13+ uses MediaPipe Tasks API (not legacy mp.solutions).
+# hand_landmarker.task is auto-downloaded on first run to python/models/

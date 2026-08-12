@@ -1,6 +1,7 @@
 # Python
 python/venv/
 python/__pycache__/
+python/models/hand_landmarker.task
 *.py[cod]
 *.egg-info/
 .pytest_cache/
