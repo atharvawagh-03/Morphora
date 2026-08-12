@@ -1,0 +1,21 @@
+# Python
+python/venv/
+python/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# TouchDesigner
+*.toe.bak
+Backup/
+touchdesigner/*.bgeo
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env
+.env
+*.log
