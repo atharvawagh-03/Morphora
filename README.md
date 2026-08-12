@@ -1,2 +1,2 @@
 # Morphora
-Gesture Controlled we
+Gesture Controlled web-app
