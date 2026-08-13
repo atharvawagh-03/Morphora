@@ -41,12 +41,39 @@ python main.py
 
 Press `q` to quit, `r` to force reset.
 
+### Test without TouchDesigner
+
+```bash
+# Terminal 1 — gesture sender
+python main.py
+
+# Terminal 2 — OSC monitor
+python test_osc_monitor.py
+
+# State machine unit checks
+python test_state_machine.py
+
+# OSC demo sequence (no webcam — for TouchDesigner testing)
+python simulate_gestures.py
+python simulate_gestures.py --step   # pause between gestures
+```
+
+### Placeholder 3D models
+
+Ten-thousand-point OBJ placeholders live in `touchdesigner/models/`. Use them while building the TD network, then swap in real `.glb` files later.
+
+Regenerate:
+```bash
+python tools/generate_point_clouds.py
+```
+
 ## Project structure
 
 ```
 Morphora/
 ├── python/           # Gesture detection + OSC sender
-├── touchdesigner/    # TD project, models, shaders
+├── touchdesigner/    # TD project, models, shaders, scripts
+├── tools/            # Point cloud generator
 ├── assets/           # Textures, screenshots, references
 └── docs/             # Testing & troubleshooting
 ```
