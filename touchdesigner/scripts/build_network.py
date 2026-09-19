@@ -260,7 +260,19 @@ def onValueChange(channel, sampleIndex, val, prev):
     except Exception:
         pass
 
-    # 8. Setup Window COMP for Perform Mode
+    # 8. Setup Window COMP & root out1 for Perform Mode
+    root_out = root.op("out1")
+    if root_out:
+        _connect(out, root_out, 0)
+        # Remove the default TouchDesigner jelly beans demo nodes
+        for demo_name in ["moviefilein1", "displace1", "geo1", "chopto1", "noise1"]:
+            old_op = root.op(demo_name)
+            if old_op:
+                try:
+                    old_op.destroy()
+                except Exception:
+                    pass
+
     win = root.op("window1")
     if not win:
         win = root.create(windowCOMP, "window1")
