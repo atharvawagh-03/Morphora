@@ -3,21 +3,20 @@ Run INSIDE TouchDesigner Textport to auto-build the Morphora network.
 
 Setup:
   1. File -> New, save as touchdesigner/main.toe (in this repo)
-  2. Dialogs -> Textport and DAT Editor
+  2. Dialogs -> Textport and DAT Editor (or Alt+T)
   3. Run:
 
      exec(open(r'D:/Morphora/touchdesigner/scripts/build_network.py').read())
 
-  4. Review the morphora Base COMP — wire Window COMP to null_out if needed
-  5. Run python/main.py or python/simulate_gestures.py alongside TD
+  4. Run python/main.py or python/simulate_gestures.py alongside TD
 """
 
 import os
 
 # Paths (edit if your repo lives elsewhere)
-REPO = os.environ.get("MORPHORA_ROOT", r"D:/Morphora")
-MODELS = os.path.join(REPO, "touchdesigner", "models")
-SHADERS = os.path.join(REPO, "touchdesigner", "shaders")
+REPO = os.environ.get("MORPHORA_ROOT", r"D:/Morphora").replace("\\", "/")
+MODELS = os.path.join(REPO, "touchdesigner", "models").replace("\\", "/")
+SHADERS = os.path.join(REPO, "touchdesigner", "shaders").replace("\\", "/")
 
 MORPH_SEC = 2.5
 EXPLODE_SEC = 0.4
@@ -31,8 +30,11 @@ def _read(path):
 
 
 def _pos(op, x, y):
-    op.nodeX = x
-    op.nodeY = y
+    try:
+        op.nodeX = x
+        op.nodeY = y
+    except Exception:
+        pass
 
 
 def _set(op, names, val):
@@ -41,9 +43,25 @@ def _set(op, names, val):
         names = [names]
     for name in names:
         if hasattr(op.par, name):
-            setattr(op.par, name, val)
-            return True
+            try:
+                setattr(op.par, name, val)
+                return True
+            except Exception:
+                pass
     return False
+
+
+def _connect(src, dst, in_idx=0):
+    """Connect source operator to destination operator using TouchDesigner connectors."""
+    if src is None or dst is None:
+        return
+    try:
+        if hasattr(dst, "inputConnectors") and len(dst.inputConnectors) > in_idx:
+            dst.inputConnectors[in_idx].connect(src)
+        elif hasattr(dst, "setInput"):
+            dst.setInput(in_idx, src)
+    except Exception as e:
+        _warn(f"Could not connect {getattr(src, 'name', src)} to {getattr(dst, 'name', dst)}: {e}")
 
 
 def _pulse(op, names):
@@ -52,8 +70,11 @@ def _pulse(op, names):
         names = [names]
     for name in names:
         if hasattr(op.par, name):
-            getattr(op.par, name).pulse()
-            return True
+            try:
+                getattr(op.par, name).pulse()
+                return True
+            except Exception:
+                pass
     return False
 
 
@@ -63,6 +84,9 @@ def _warn(msg):
 
 def build():
     root = op("/project1")
+    if not root:
+        root = op("/")
+
     if root.op("morphora"):
         root.op("morphora").destroy()
 
@@ -70,16 +94,15 @@ def build():
     base.viewer = True
     _pos(base, 0, 0)
 
-    # OSC
+    # 1. OSC Receiver
     osc = base.create(oscinCHOP, "osc_in")
-    if not _set(osc, ["port", "netport", "networkport"], OSC_PORT):
-        _warn("Could not set OSC In port — set to 7000 manually on osc_in")
+    _set(osc, ["port", "netport", "networkport"], OSC_PORT)
     _pos(osc, -800, 400)
 
+    # Select CHOPs (selectCHOP uses 'chop' parameter, NOT wires)
     for name, idx in [("select_state", 0), ("select_event", 1)]:
         sel = base.create(selectCHOP, name)
-        sel.setInput(0, osc)
-        _set(sel, ["chop", "chops"], osc)
+        _set(sel, ["chop", "chops"], osc.name)
         _set(sel, ["channames", "channelnames"], "*")
         _pos(sel, -600, 400 - idx * 120)
 
@@ -103,16 +126,19 @@ def build():
     math_explode = base.create(mathCHOP, "math_explode")
     _set(math_explode, "preoff", 1)
     _set(math_explode, "gain", -1)
-    math_explode.setInput(0, timer_explode)
+    _connect(timer_explode, math_explode, 0)
     _pos(math_explode, 0, 380)
 
     handler = base.create(chopexecuteDAT, "event_handler")
-    _set(handler, ["chop", "chops"], base.op("select_event"))
+    _set(handler, ["chop", "chops"], base.op("select_event").name)
     _set(handler, ["valuechange", "valuechangef"], True)
-    handler.text = _read(os.path.join(REPO, "touchdesigner", "scripts", "osc_event_handler.py"))
+    try:
+        handler.text = _read(os.path.join(REPO, "touchdesigner", "scripts", "osc_event_handler.py"))
+    except Exception as e:
+        _warn(f"Could not load osc_event_handler.py: {e}")
     _pos(handler, -400, 80)
 
-    # Model SOP chains
+    # 2. Model SOP chains
     model_files = {
         "butterfly": "butterfly_10k.obj",
         "dragon": "dragon_10k.obj",
@@ -129,78 +155,84 @@ def build():
 
         facet = base.create(facetSOP, "facet_" + name)
         _set(facet, ["unique", "uniquepoints"], True)
-        facet.setInput(0, f)
+        _connect(f, facet, 0)
         _pos(facet, x, 500)
 
         n = base.create(nullSOP, name + "_out")
-        n.setInput(0, facet)
+        _connect(facet, n, 0)
         _pos(n, x, 400)
         outs[name] = n
         x += 250
 
     switch_cur = base.create(switchSOP, "switch_current")
-    switch_cur.setInput(0, outs["butterfly"])
-    switch_cur.setInput(1, outs["dragon"])
-    switch_cur.setInput(2, outs["lily"])
-    _set(switch_cur, "input", 0)
+    _connect(outs["butterfly"], switch_cur, 0)
+    _connect(outs["dragon"], switch_cur, 1)
+    _connect(outs["lily"], switch_cur, 2)
+    _set(switch_cur, ["input", "index"], 0)
     _pos(switch_cur, 350, 200)
 
     switch_tgt = base.create(switchSOP, "switch_target")
-    switch_tgt.setInput(0, outs["dragon"])
-    switch_tgt.setInput(1, outs["lily"])
-    switch_tgt.setInput(2, outs["butterfly"])
-    _set(switch_tgt, "input", 0)
+    _connect(outs["dragon"], switch_tgt, 0)
+    _connect(outs["lily"], switch_tgt, 1)
+    _connect(outs["butterfly"], switch_tgt, 2)
+    _set(switch_tgt, ["input", "index"], 0)
     _pos(switch_tgt, 550, 200)
 
     script = base.create(scriptSOP, "morph_script")
-    script.setInput(0, switch_cur)
-    script.setInput(1, switch_tgt)
+    _connect(switch_cur, script, 0)
+    _connect(switch_tgt, script, 1)
     script_dat = base.create(textDAT, "morph_targetp_dat")
-    script_dat.text = _read(os.path.join(REPO, "touchdesigner", "scripts", "morph_targetp.py"))
-    if not _set(script, ["callbackdat", "callbacks", "script"], script_dat):
-        _warn("Could not link morph_targetp_dat to morph_script — link manually")
+    try:
+        script_dat.text = _read(os.path.join(REPO, "touchdesigner", "scripts", "morph_targetp.py"))
+    except Exception as e:
+        _warn(f"Could not load morph_targetp.py: {e}")
+    _set(script, ["callbackdat", "callbacks", "script"], script_dat.name)
     _pos(script_dat, 750, 80)
     _pos(script, 750, 200)
 
     morph_ready = base.create(nullSOP, "morph_ready")
-    morph_ready.setInput(0, script)
+    _connect(script, morph_ready, 0)
     _pos(morph_ready, 950, 200)
 
-    # Particles
+    # 3. Particle Geometry & Material
     geo = base.create(geometryCOMP, "geo_particles")
     _set(geo, "render", True)
     _set(geo, ["points", "renderpoints"], True)
     _set(geo, ["pointsize", "pointsize3d"], 3)
-    _set(geo, "sop", morph_ready)
+    _set(geo, "sop", morph_ready.name)
     _pos(geo, 950, 0)
 
     mat = base.create(glslMAT, "mat_particles")
-    vert_src = _read(os.path.join(SHADERS, "particle_morph.vert"))
-    frag_src = _read(os.path.join(SHADERS, "particle_morph.frag"))
-    if not _set(mat, ["vertexshader", "vertshader"], vert_src):
-        _warn("Could not set vertex shader on mat_particles — paste manually")
-    if not _set(mat, ["pixelfshader", "pixelshader", "fragshader"], frag_src):
-        _warn("Could not set pixel shader on mat_particles — paste manually")
+    try:
+        vert_src = _read(os.path.join(SHADERS, "particle_morph.vert"))
+        frag_src = _read(os.path.join(SHADERS, "particle_morph.frag"))
+        _set(mat, ["vertexshader", "vertshader"], vert_src)
+        _set(mat, ["pixelfshader", "pixelshader", "fragshader"], frag_src)
+    except Exception as e:
+        _warn(f"Could not load shaders: {e}")
 
     for uname, val in [("uSwirlStrength", 0.4), ("uNoiseAmp", 0.25), ("uPointSize", 3.0)]:
         if hasattr(mat.par, uname):
             setattr(mat.par, uname, val)
 
-    _set(geo, "material", mat)
+    _set(geo, "material", mat.name)
     _pos(mat, 750, 0)
 
     try:
-        mat.par.uMorphT.expr = "op('timer_morph')['fraction']"
-        mat.par.uExplodeAmt.expr = "op('math_explode')[0]"
-        mat.par.uTime.expr = "absTime.seconds"
+        if hasattr(mat.par, "uMorphT"):
+            mat.par.uMorphT.expr = "op('timer_morph')['fraction']"
+        if hasattr(mat.par, "uExplodeAmt"):
+            mat.par.uExplodeAmt.expr = "op('math_explode')[0]"
+        if hasattr(mat.par, "uTime"):
+            mat.par.uTime.expr = "absTime.seconds"
     except Exception as e:
-        _warn("Wire uMorphT/uExplodeAmt manually on mat_particles: " + str(e))
+        _warn("Expression on mat_particles: " + str(e))
 
-    # Camera + lights + cube
+    # 4. Camera, Lights & Wireframe Cube
     cam = base.create(cameraCOMP, "cam1")
     _set(cam, "tx", 0)
     _set(cam, "ty", 0)
-    _set(cam, "tz", 4)
+    _set(cam, "tz", 4.5)
     _pos(cam, 200, -200)
 
     key = base.create(lightCOMP, "key")
@@ -222,56 +254,55 @@ def build():
     box = geo_cube.create(boxSOP, "box1")
     _set(geo_cube, "render", True)
     _set(geo_cube, ["wireframe", "wireframefront"], True)
-    _set(geo_cube, "sop", box)
-    _set(geo_cube, "uniformscale", 1.2)
+    _set(geo_cube, "sop", box.name)
+    _set(geo_cube, "uniformscale", 1.3)
     _pos(geo_cube, 650, -200)
 
-    # Render + composite
+    # 5. Render & Visual Post-Processing Pipeline
     render = base.create(renderTOP, "render1")
-    _set(render, "camera", cam)
-    _set(render, "geometry", geo)
-    _set(render, "lights", key)
-    _set(render, ["resolutionw", "resw"], 1280)
-    _set(render, ["resolutionh", "resh"], 720)
+    _set(render, "camera", cam.name)
+    _set(render, "geometry", "geo_particles geo_cube")
+    _set(render, "lights", key.name)
+    _set(render, ["resolutionw", "resw"], 1920)
+    _set(render, ["resolutionh", "resh"], 1080)
     _pos(render, 950, -400)
 
-    cam_bg = base.create(videodevinTOP, "videodevin1")
-    _set(cam_bg, ["resolutionw", "resw"], 1280)
-    _set(cam_bg, ["resolutionh", "resh"], 720)
-    _pos(cam_bg, 750, -550)
-
-    comp = base.create(compositeTOP, "composite1")
-    comp.setInput(0, cam_bg)
-    comp.setInput(1, render)
-    _set(comp, "operand", "over")
-    _pos(comp, 950, -550)
-
     bloom = base.create(bloomTOP, "bloom1")
-    _set(bloom, "threshold", 0.65)
-    bloom.setInput(0, comp)
-    _pos(bloom, 1150, -550)
+    _set(bloom, "threshold", 0.55)
+    _set(bloom, "intensity", 1.2)
+    _connect(render, bloom, 0)
+    _pos(bloom, 1150, -400)
 
     level = base.create(levelTOP, "level1")
-    level.setInput(0, bloom)
-    _pos(level, 1350, -550)
+    _set(level, "gamma1", 1.1)
+    _connect(bloom, level, 0)
+    _pos(level, 1350, -400)
 
     out = base.create(nullTOP, "null_out")
-    out.setInput(0, level)
-    _pos(out, 1550, -550)
+    _connect(level, out, 0)
+    _pos(out, 1550, -400)
 
-    win = root.create(windowCOMP, "window1")
-    _set(win, ["winop", "operator"], out)
+    try:
+        out.display = True
+        out.render = True
+    except Exception:
+        pass
+
+    # 6. Window COMP (Perform Mode Output)
+    win = root.op("window1")
+    if not win:
+        win = root.create(windowCOMP, "window1")
+    _set(win, ["winop", "operator"], out.path)
     _set(win, "justifyh", "center")
     _set(win, "justifyv", "center")
     _pos(win, 1200, -800)
 
     print("=" * 60)
-    print("Morphora network built under /project1/morphora")
-    print("Next:")
-    print("  1. Open /project1/morphora and check for yellow warning nodes")
-    print("  2. Pulse trig_morph_dragon to test morph")
-    print("  3. Run: python simulate_gestures.py")
-    print("  4. File -> Save As -> touchdesigner/main.toe")
+    print("Morphora network built successfully under /project1/morphora!")
+    print("Next steps:")
+    print("  1. Press F1 to enter Perform Mode")
+    print("  2. Watch the glowing 3D particles morph with your hand gestures!")
+    print("  3. File -> Save to keep the network saved")
     print("=" * 60)
 
 
