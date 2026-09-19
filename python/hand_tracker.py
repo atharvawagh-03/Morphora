@@ -51,7 +51,17 @@ class HandTracker:
         )
         self._landmarker = vision.HandLandmarker.create_from_options(options)
         self._start_time = time.monotonic()
-        self._cap = cv2.VideoCapture(CAMERA_INDEX)
+
+        # On Windows, cv2.CAP_DSHOW is much faster and more reliable than MSMF
+        cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(CAMERA_INDEX)
+        if not cap.isOpened() and CAMERA_INDEX == 0:
+            cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(1)
+
+        self._cap = cap
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
 
