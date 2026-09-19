@@ -58,7 +58,7 @@ def build():
     if not root:
         root = op("/")
 
-    # Clear old demo nodes in /project1
+    # Clear old nodes in /project1
     for child in list(root.children):
         try:
             child.destroy()
@@ -113,7 +113,12 @@ def onValueChange(channel, sampleIndex, val, prev):
 '''
     _pos(handler, -400, 80)
 
-    # 2. 3D Models: Butterfly, Dragon, Lily (10,000 points each)
+    # 2. 10,000-Particle Geometry (Self-contained inside geo_particles)
+    geo = root.create(geometryCOMP, "geo_particles")
+    _pos(geo, 400, 150)
+    for c in list(geo.children):
+        c.destroy()
+
     model_files = {
         "butterfly": "butterfly_10k.obj",
         "dragon": "dragon_10k.obj",
@@ -124,12 +129,12 @@ def onValueChange(channel, sampleIndex, val, prev):
     x = 100
     for name, fname in model_files.items():
         path = os.path.join(MODELS, fname).replace("\\", "/")
-        f = root.create(fileSOP, "file_" + name)
+        f = geo.create(fileSOP, "file_" + name)
         _set(f, "file", path)
         _pos(f, x, 600)
 
-        # Color the points: Butterfly=Cyan, Dragon=Red, Lily=Pink
-        col = root.create(pointSOP, "color_" + name)
+        # Color the points: Butterfly=Cyan (#00c2ff), Dragon=Red (#ff1e2d), Lily=Pink (#c2185b)
+        col = geo.create(pointSOP, "color_" + name)
         _set(col, ["color", "keepcolor"], True)
         _set(col, "doclr", 1)
         if name == "butterfly":
@@ -138,67 +143,63 @@ def onValueChange(channel, sampleIndex, val, prev):
             _set(col, ["cb", "colorb"], 1.0)
         elif name == "dragon":
             _set(col, ["cr", "colorr"], 1.0)
-            _set(col, ["cg", "colorg"], 0.12)
+            _set(col, ["cg", "colorg"], 0.15)
             _set(col, ["cb", "colorb"], 0.18)
         else:
             _set(col, ["cr", "colorr"], 0.95)
             _set(col, ["cg", "colorg"], 0.15)
-            _set(col, ["cb", "colorb"], 0.55)
+            _set(col, ["cb", "colorb"], 0.60)
 
         _connect(f, col, 0)
-        _pos(col, x, 500)
+        _pos(col, x, 450)
 
-        n = root.create(nullSOP, name + "_out")
+        n = geo.create(nullSOP, name + "_out")
         _connect(col, n, 0)
-        _pos(n, x, 400)
+        _pos(n, x, 300)
         outs[name] = n
-        x += 220
+        x += 200
 
-    # 3. Native GPU Point Cloud Blending
-    switch = root.create(switchSOP, "switch_morph")
+    # Switch SOP with GPU Point Cloud Blending
+    switch = geo.create(switchSOP, "switch_morph")
     _connect(outs["butterfly"], switch, 0)
     _connect(outs["dragon"], switch, 1)
     _connect(outs["lily"], switch, 2)
     _set(switch, ["blend", "blendinputs"], True)
     try:
-        switch.par.index.expr = "op('morph_lag')['target_index']"
+        switch.par.index.expr = "op('../morph_lag')['target_index']"
     except Exception:
         try:
-            switch.par.input.expr = "op('morph_lag')['target_index']"
+            switch.par.input.expr = "op('../morph_lag')['target_index']"
         except Exception:
             pass
-    _pos(switch, 320, 250)
+    _pos(switch, 300, 150)
 
-    # 4. Geometry COMP for 10,000 Particles
-    geo = root.create(geometryCOMP, "geo_particles")
-    _pos(geo, 550, 0)
-    for c in list(geo.children):
-        c.destroy()
-    in_sop = geo.create(inSOP, "in1")
-    in_sop.render = True
-    in_sop.display = True
-    _connect(switch, geo, 0)
+    # Convert to Particle System primitive so points are universally renderable
+    add_pts = geo.create(addSOP, "add_particles")
+    _connect(switch, add_pts, 0)
+    _set(add_pts, ["addparticle", "allpoints"], 1)
+    add_pts.render = True
+    add_pts.display = True
+    _pos(add_pts, 300, 0)
 
+    # Particle Material: Point sprites with point colors
+    mat_pts = root.create(pointMAT, "mat_particles")
+    _set(mat_pts, ["size", "pointsize"], 6.0)
+    _set(mat_pts, ["constant", "unlit"], True)
+    _set(mat_pts, ["colormode", "pointcolormode"], 1)
+    _pos(mat_pts, 200, 150)
+    _set(geo, "material", mat_pts.name)
     _set(geo, "render", True)
     _set(geo, ["points", "renderpoints"], True)
-    _set(geo, ["pointsize", "pointsize3d"], 4)
+    _set(geo, ["pointsize", "pointsize3d"], 6.0)
 
-    # Particle Material with Point Colors
-    mat_pts = root.create(constantMAT, "mat_particles")
-    _set(mat_pts, ["pointcolor", "usepointcolor"], True)
-    _set(mat_pts, ["colorr", "cr"], 0.0)
-    _set(mat_pts, ["colorg", "cg"], 0.85)
-    _set(mat_pts, ["colorb", "cb"], 1.0)
-    _pos(mat_pts, 400, 0)
-    _set(geo, "material", mat_pts.name)
-
-    # 5. Rotating Wireframe Cube
+    # 3. Rotating Wireframe Cube
     geo_cube = root.create(geometryCOMP, "geo_cube")
-    _pos(geo_cube, 550, -200)
+    _pos(geo_cube, 400, -150)
     for c in list(geo_cube.children):
         c.destroy()
     box = geo_cube.create(boxSOP, "box1")
-    _set(box, ["sizex", "sizey", "sizez"], 1.5)
+    _set(box, ["sizex", "sizey", "sizez"], 1.6)
     box.render = True
     box.display = True
 
@@ -215,43 +216,43 @@ def onValueChange(channel, sampleIndex, val, prev):
     _set(mat_cube, ["colorr", "cr"], 0.0)
     _set(mat_cube, ["colorg", "cg"], 0.6)
     _set(mat_cube, ["colorb", "cb"], 0.95)
-    _pos(mat_cube, 400, -200)
+    _pos(mat_cube, 200, -150)
     _set(geo_cube, "material", mat_cube.name)
 
-    # 6. Camera
+    # 4. Camera
     cam = root.create(cameraCOMP, "cam1")
     _set(cam, "tx", 0)
     _set(cam, "ty", 0)
     _set(cam, "tz", 3.2)
-    _pos(cam, 100, -200)
+    _pos(cam, 0, -250)
 
-    # 7. Render & Bloom Pipeline
+    # 5. Render & Bloom Pipeline
     render = root.create(renderTOP, "render1")
     _set(render, "camera", cam.name)
     _set(render, "geometry", "*")
     _set(render, ["resolutionw", "resw"], 1920)
     _set(render, ["resolutionh", "resh"], 1080)
-    _pos(render, 750, -300)
+    _pos(render, 700, -100)
 
     bloom = root.create(bloomTOP, "bloom1")
-    _set(bloom, "threshold", 0.35)
-    _set(bloom, "intensity", 1.6)
+    _set(bloom, "threshold", 0.30)
+    _set(bloom, "intensity", 1.8)
     _connect(render, bloom, 0)
-    _pos(bloom, 950, -300)
+    _pos(bloom, 900, -100)
 
-    # 8. Output TOP directly in /project1
+    # 6. Output TOP directly in /project1
     out = root.create(nullTOP, "out1")
     _connect(bloom, out, 0)
     out.display = True
     out.render = True
-    _pos(out, 1150, -300)
+    _pos(out, 1100, -100)
 
-    # 9. Window COMP for Perform Mode
+    # 7. Window COMP for Perform Mode
     win = root.create(windowCOMP, "window1")
     _set(win, ["winop", "operator"], out.name)
     _set(win, "justifyh", "center")
     _set(win, "justifyv", "center")
-    _pos(win, 1150, -500)
+    _pos(win, 1100, -300)
 
     # Set project perform window
     try:
@@ -264,15 +265,15 @@ def onValueChange(channel, sampleIndex, val, prev):
         pass
 
     print("=" * 60)
-    print("Morphora 3D Visual Network Successfully Built in /project1!")
-    print("  ✓ 10,000-Point Butterfly Model Loaded (Cyan)")
-    print("  ✓ 10,000-Point Dragon Model Loaded (Red)")
-    print("  ✓ 10,000-Point Lily Model Loaded (Pink)")
-    print("  ✓ GPU Point Cloud Morphing Active")
+    print("Morphora 3D Visual Network Successfully Built!")
+    print("  ✓ 10,000 Glowing Butterfly Particles (Cyan)")
+    print("  ✓ 10,000 Glowing Dragon Particles (Red)")
+    print("  ✓ 10,000 Glowing Lily Particles (Pink)")
+    print("  ✓ Particle System Add SOP + PointMAT Active")
     print("  ✓ Rotating Wireframe Cube Active")
     print("  ✓ Bloom Glow Wired Directly to out1 & Perform Mode")
     print("=" * 60)
-    print("Press F1 now to view your glowing 3D Butterfly!")
+    print("Press F1 now to view the glowing Butterfly inside the cube!")
     print("=" * 60)
 
 
