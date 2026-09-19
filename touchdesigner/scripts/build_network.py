@@ -187,18 +187,19 @@ def onValueChange(channel, sampleIndex, val, prev):
             pass
     _pos(switch, 300, 150)
 
-    # Convert to Particle System primitive so points are universally renderable
-    add_pts = geo.create(addSOP, "add_particles")
-    _connect(switch, add_pts, 0)
-    _set(add_pts, ["addparticle", "allpoints"], 1)
-    _set(add_pts, "addp", 1)
-    _pos(add_pts, 300, 50)
-
     out_geo = geo.create(nullSOP, "out1")
-    _connect(add_pts, out_geo, 0)
-    out_geo.render = True
-    out_geo.display = True
+    _connect(switch, out_geo, 0)
+    try:
+        out_geo.render = True
+        out_geo.display = True
+    except Exception:
+        pass
     _pos(out_geo, 300, -100)
+
+    # Enable Point Rendering directly on the Geometry COMP
+    _set(geo, ["renderpoints", "points"], 1)
+    _set(geo, ["pointsize", "pointsize3d"], 8.0)
+    _set(geo, "render", True)
 
     # Particle Material: Point sprites with point colors
     try:
@@ -209,14 +210,11 @@ def onValueChange(channel, sampleIndex, val, prev):
         except Exception:
             mat_pts = root.create(constantMAT, "mat_particles")
 
-    _set(mat_pts, ["size", "pointsize", "psize"], 6.0)
+    _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
     _set(mat_pts, ["constant", "unlit"], True)
     _set(mat_pts, ["colormode", "pointcolormode"], 1)
     _pos(mat_pts, 200, 150)
     _set(geo, ["material", "mat"], mat_pts.path)
-    _set(geo, "render", True)
-    _set(geo, ["points", "renderpoints"], True)
-    _set(geo, ["pointsize", "pointsize3d"], 6.0)
 
     # 3. Rotating Wireframe Cube
     geo_cube = root.create(geometryCOMP, "geo_cube")
@@ -253,8 +251,8 @@ def onValueChange(channel, sampleIndex, val, prev):
 
     # 5. Render & Bloom Pipeline
     render = root.create(renderTOP, "render1")
-    _set(render, "camera", cam.name)
-    _set(render, "geometry", "*")
+    _set(render, ["camera", "cam"], cam.path)
+    _set(render, ["geometry", "geo"], "*")
     _set(render, ["resolutionw", "resw"], 1920)
     _set(render, ["resolutionh", "resh"], 1080)
     _pos(render, 700, -100)
