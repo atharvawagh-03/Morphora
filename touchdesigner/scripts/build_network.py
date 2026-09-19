@@ -31,13 +31,26 @@ def _pos(op, x, y):
 def _set(op, names, val):
     if isinstance(names, str):
         names = [names]
+        
+    # Check if assigning OP object directly (e.g. material = mat_pts or mat_pts.path/name)
+    val_str = getattr(val, "path", getattr(val, "name", val))
+
     for name in names:
         if hasattr(op.par, name):
+            par = getattr(op.par, name)
             try:
-                setattr(op.par, name, val)
+                par.val = val
                 return True
             except Exception:
-                pass
+                try:
+                    par.val = val_str
+                    return True
+                except Exception:
+                    try:
+                        setattr(op.par, name, val)
+                        return True
+                    except Exception:
+                        pass
     return False
 
 
@@ -188,12 +201,19 @@ def onValueChange(channel, sampleIndex, val, prev):
     _pos(out_geo, 300, -100)
 
     # Particle Material: Point sprites with point colors
-    mat_pts = root.create(pointMAT, "mat_particles")
-    _set(mat_pts, ["size", "pointsize"], 6.0)
+    try:
+        mat_pts = root.create(pointSpriteMAT, "mat_particles")
+    except Exception:
+        try:
+            mat_pts = root.create(pointMAT, "mat_particles")
+        except Exception:
+            mat_pts = root.create(constantMAT, "mat_particles")
+
+    _set(mat_pts, ["size", "pointsize", "psize"], 6.0)
     _set(mat_pts, ["constant", "unlit"], True)
     _set(mat_pts, ["colormode", "pointcolormode"], 1)
     _pos(mat_pts, 200, 150)
-    _set(geo, "material", mat_pts.name)
+    _set(geo, ["material", "mat"], mat_pts.path)
     _set(geo, "render", True)
     _set(geo, ["points", "renderpoints"], True)
     _set(geo, ["pointsize", "pointsize3d"], 6.0)
@@ -222,7 +242,7 @@ def onValueChange(channel, sampleIndex, val, prev):
     _set(mat_cube, ["colorg", "cg"], 0.6)
     _set(mat_cube, ["colorb", "cb"], 0.95)
     _pos(mat_cube, 200, -150)
-    _set(geo_cube, "material", mat_cube.name)
+    _set(geo_cube, ["material", "mat"], mat_cube.path)
 
     # 4. Camera
     cam = root.create(cameraCOMP, "cam1")
@@ -239,15 +259,19 @@ def onValueChange(channel, sampleIndex, val, prev):
     _set(render, ["resolutionh", "resh"], 1080)
     _pos(render, 700, -100)
 
-    bloom = root.create(bloomTOP, "bloom1")
-    _set(bloom, "threshold", 0.30)
-    _set(bloom, "intensity", 1.8)
-    _connect(render, bloom, 0)
-    _pos(bloom, 900, -100)
+    try:
+        bloom = root.create(bloomTOP, "bloom1")
+        _set(bloom, "threshold", 0.30)
+        _set(bloom, "intensity", 1.8)
+        _connect(render, bloom, 0)
+        _pos(bloom, 900, -100)
+        last_top = bloom
+    except Exception:
+        last_top = render
 
     # 6. Output TOP directly in /project1
     out = root.create(nullTOP, "out1")
-    _connect(bloom, out, 0)
+    _connect(last_top, out, 0)
     out.display = True
     out.render = True
     _pos(out, 1100, -100)
