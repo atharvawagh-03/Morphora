@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morphora — Gesture-Controlled 3D Particle Morphing</title>
+    <meta name="description" content="Morphora: Real-time gesture-controlled 3D point cloud morphing. Hand gestures morph 10,000 floating particles between a butterfly, dragon, and lily inside a glowing wireframe cube. Built with Python, MediaPipe, OpenCV, OSC, and TouchDesigner.">
+    <meta name="keywords" content="Morphora, gesture control, particle morphing, 3D point cloud, MediaPipe, TouchDesigner, GLSL, interactive art, new media art">
+    <meta name="author" content="Morphora Team">
+    <meta property="og:title" content="Morphora — Gesture-Controlled 3D Particle Morphing">
+    <meta property="og:description" content="Hand gestures morph 10,000 floating particles between mythical forms inside a glowing wireframe cube.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/images/hero.jpg">
+    <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Floating particles background canvas -->
+    <canvas id="particle-bg"></canvas>
+
+    <!-- Navigation -->
+    <nav id="main-nav">
+        <div class="nav-container">
+            <a href="#hero" class="nav-logo">
+                <span class="logo-icon">◇</span>
+                <span class="logo-text">Morphora</span>
+            </a>
+            <div class="nav-links">
+                <a href="#about" class="nav-link">About</a>
+                <a href="#forms" class="nav-link">Forms</a>
+                <a href="#gestures" class="nav-link">Gestures</a>
+                <a href="#architecture" class="nav-link">Architecture</a>
+                <a href="#tech" class="nav-link">Stack</a>
+                <a href="#setup" class="nav-link">Setup</a>
+                <a href="https://github.com/atharvawagh-03/Morphora" class="nav-cta" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    GitHub
+                </a>
+            </div>
+            <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                Interactive Art Installation
+            </div>
+            <h1 class="hero-title">
+                <span class="title-line">Gesture-Controlled</span>
+                <span class="title-line gradient-text">3D Particle Morphing</span>
+            </h1>
+            <p class="hero-subtitle">
+                Webcam hand gestures morph <strong>10,000 floating particles</strong> between a 
+                <span class="text-cyan">blue butterfly</span>, 
+                <span class="text-red">red dragon</span>, and 
+                <span class="text-pink">dark pink lilies</span> 
+                inside a glowing wireframe cube.
+            </p>
+            <div class="hero-actions">
+                <a href="#setup" class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Get Started
+                </a>
+                <a href="https://github.com/atharvawagh-03/Morphora" class="btn btn-secondary" target="_blank" rel="noopener">
+                    View Source
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 17 10-10"/><path d="M7 7h10v10"/></svg>
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="stat-value">10K</span>
+                    <span class="stat-label">Particles</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-value">6</span>
+                    <span class="stat-label">States</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-value">60</span>
+                    <span class="stat-label">FPS</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-value">2.5s</span>
+                    <span class="stat-label">Morph Time</span>
+                </div>
+            </div>
+        </div>
+        <div class="hero-image-container">
+            <div class="hero-glow"></div>
+            <img src="assets/images/hero.jpg" alt="Morphora installation — particles morphing between butterfly and dragon" class="hero-image" loading="eager">
+        </div>
+        <div class="scroll-indicator">
+            <span>Scroll to explore</span>
+            <div class="scroll-arrow"></div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">About</span>
+                <h2 class="section-title">Where Gesture Meets <span class="gradient-text">Digital Form</span></h2>
+                <p class="section-desc">
+                    Morphora is a real-time interactive art installation that bridges the physical and digital worlds. 
+                    Using computer vision and custom GLSL shaders, it transforms hand gestures into breathtaking 3D particle transformations.
+                </p>
+            </div>
+            <div class="about-grid">
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 10-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-2V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/></svg>
+                    </div>
+                    <h3>Hand Tracking</h3>
+                    <p>MediaPipe's AI-powered hand landmarker detects 21 landmarks per hand at 30+ FPS with sub-pixel accuracy.</p>
+                </div>
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                    </div>
+                    <h3>Geometric Detection</h3>
+                    <p>Custom gesture classifier using palm-center-relative distances with hysteresis pinch detection and stability buffering.</p>
+                </div>
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h3>Real-Time Morphing</h3>
+                    <p>GLSL vertex shader interpolates 10K points with turbulence, swirl, and radial explosion for organic transitions.</p>
+                </div>
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    </div>
+                    <h3>Wireframe Cube</h3>
+                    <p>Glowing wireframe cube with gesture-triggered open animation — the final reveal after morphing through all three forms.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Forms Section -->
+    <section id="forms" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Particle Forms</span>
+                <h2 class="section-title">Three Morphing <span class="gradient-text">Shapes</span></h2>
+                <p class="section-desc">
+                    Each form is a 10,000-point cloud with distinct color identities and organic distribution. 
+                    GLSL shaders morph particles between shapes with turbulence and swirl effects.
+                </p>
+            </div>
+            <div class="forms-showcase">
+                <div class="form-card" data-form="butterfly">
+                    <div class="form-image-wrap">
+                        <div class="form-glow form-glow-cyan"></div>
+                        <img src="assets/images/butterfly.jpg" alt="Blue butterfly point cloud" loading="lazy">
+                    </div>
+                    <div class="form-info">
+                        <div class="form-badge form-badge-cyan">Initial State</div>
+                        <h3>Blue Butterfly</h3>
+                        <p>Wings: <code>#00C2FF</code> · Body: <code>#0A0A0C</code></p>
+                        <p class="form-detail">Twin ellipsoid wings with 4,550 points each, connected by a 900-point body spine.</p>
+                    </div>
+                </div>
+                <div class="form-card" data-form="dragon">
+                    <div class="form-image-wrap">
+                        <div class="form-glow form-glow-red"></div>
+                        <img src="assets/images/dragon.jpg" alt="Red dragon point cloud" loading="lazy">
+                    </div>
+                    <div class="form-info">
+                        <div class="form-badge form-badge-red">Second Form</div>
+                        <h3>Red Dragon</h3>
+                        <p>Highlights: <code>#FF1E2D</code> · Body: <code>#5C0A0A</code></p>
+                        <p class="form-detail">Serpentine spine with sinusoidal wave motion, 6,200 body points and 1,900-point wings.</p>
+                    </div>
+                </div>
+                <div class="form-card" data-form="lily">
+                    <div class="form-image-wrap">
+                        <div class="form-glow form-glow-pink"></div>
+                        <img src="assets/images/lily.jpg" alt="Pink lily point cloud" loading="lazy">
+                    </div>
+                    <div class="form-info">
+                        <div class="form-badge form-badge-pink">Final Form</div>
+                        <h3>Dark Pink Lily</h3>
+                        <p>Center: <code>#C2185B</code> · Edges: <code>#FFF8F0</code></p>
+                        <p class="form-detail">Eight radial petals with distance-based gradient, 1,800-point center with bloom highlights.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Gestures Section -->
+    <section id="gestures" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Interaction</span>
+                <h2 class="section-title">Gesture <span class="gradient-text">Controls</span></h2>
+                <p class="section-desc">
+                    Five distinct gestures drive the state machine through six states. 
+                    Edge-triggered detection with stability buffering ensures reliable gesture recognition.
+                </p>
+            </div>
+            <div class="gesture-flow">
+                <div class="gesture-step">
+                    <div class="gesture-icon gesture-icon-cyan">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </div>
+                    <div class="gesture-content">
+                        <span class="gesture-label">Left Fist → Open</span>
+                        <h4>Butterfly → Dragon</h4>
+                        <p>Close left fist then open palm to trigger the first morph. Particles swirl from cyan to crimson.</p>
+                    </div>
+                    <div class="gesture-state">
+                        <span class="state-from state-cyan">BUTTERFLY</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                        <span class="state-to state-red">DRAGON</span>
+                    </div>
+                </div>
+                <div class="gesture-step">
+                    <div class="gesture-icon gesture-icon-red">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </div>
+                    <div class="gesture-content">
+                        <span class="gesture-label">Left Fist → Open</span>
+                        <h4>Dragon → Lily</h4>
+                        <p>Same gesture, next morph. Dragon particles dissolve and reform into blooming lily petals.</p>
+                    </div>
+                    <div class="gesture-state">
+                        <span class="state-from state-red">DRAGON</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                        <span class="state-to state-pink">LILY</span>
+                    </div>
+                </div>
+                <div class="gesture-step">
+                    <div class="gesture-icon gesture-icon-pink">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59"/></svg>
+                    </div>
+                    <div class="gesture-content">
+                        <span class="gesture-label">Right Pinch</span>
+                        <h4>Lily → Cube Open</h4>
+                        <p>Pinch with right hand on the lily form to trigger the wireframe cube's open animation and glow effect.</p>
+                    </div>
+                    <div class="gesture-state">
+                        <span class="state-from state-pink">LILY</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                        <span class="state-to state-white">CUBE OPEN</span>
+                    </div>
+                </div>
+                <div class="gesture-step">
+                    <div class="gesture-icon gesture-icon-white">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    </div>
+                    <div class="gesture-content">
+                        <span class="gesture-label">Both Hands Open</span>
+                        <h4>Reset to Butterfly</h4>
+                        <p>Open both palms to reset the entire system. Particles snap back to the initial butterfly formation.</p>
+                    </div>
+                    <div class="gesture-state">
+                        <span class="state-from state-white">ANY</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                        <span class="state-to state-cyan">BUTTERFLY</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section id="architecture" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">System Design</span>
+                <h2 class="section-title">Two-Process <span class="gradient-text">Architecture</span></h2>
+                <p class="section-desc">
+                    Python owns gesture truth; TouchDesigner owns visual truth. They communicate via OSC UDP on port 7000.
+                </p>
+            </div>
+            <div class="arch-diagram">
+                <div class="arch-box arch-python">
+                    <div class="arch-header">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                        <span>Python Process</span>
+                    </div>
+                    <div class="arch-subtitle">Gesture Truth</div>
+                    <div class="arch-modules">
+                        <div class="arch-module">
+                            <span class="module-name">HandTracker</span>
+                            <span class="module-desc">MediaPipe + OpenCV</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">GestureDetector</span>
+                            <span class="module-desc">Geometric classifier</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">StateMachine</span>
+                            <span class="module-desc">6-state FSM</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">OSCSender</span>
+                            <span class="module-desc">python-osc UDP</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="arch-connector">
+                    <div class="connector-line"></div>
+                    <div class="connector-label">
+                        <span class="connector-protocol">OSC UDP</span>
+                        <span class="connector-port">:7000</span>
+                    </div>
+                    <div class="connector-channels">
+                        <code>/gesture/state</code>
+                        <code>/gesture/event</code>
+                        <code>/gesture/left</code>
+                        <code>/gesture/right</code>
+                        <code>/gesture/alive</code>
+                    </div>
+                    <div class="connector-line"></div>
+                </div>
+                <div class="arch-box arch-td">
+                    <div class="arch-header">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                        <span>TouchDesigner</span>
+                    </div>
+                    <div class="arch-subtitle">Visual Truth</div>
+                    <div class="arch-modules">
+                        <div class="arch-module">
+                            <span class="module-name">OSC In CHOP</span>
+                            <span class="module-desc">Receive gestures</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">Timer CHOPs</span>
+                            <span class="module-desc">Morph / Explode / Cube</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">Model SOPs</span>
+                            <span class="module-desc">10K-point clouds</span>
+                        </div>
+                        <div class="arch-arrow-down">↓</div>
+                        <div class="arch-module">
+                            <span class="module-name">GLSL MAT</span>
+                            <span class="module-desc">Morph + Bloom</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- State Machine Diagram -->
+            <div class="state-diagram">
+                <h3 class="state-diagram-title">State Machine Flow</h3>
+                <div class="state-flow">
+                    <div class="state-node state-node-cyan">
+                        <span class="state-id">0</span>
+                        <span class="state-name">BUTTERFLY</span>
+                    </div>
+                    <div class="state-transition">
+                        <span class="transition-label">fist→open</span>
+                        <div class="transition-arrow"></div>
+                    </div>
+                    <div class="state-node state-node-morph">
+                        <span class="state-id">1</span>
+                        <span class="state-name">MORPH→DRAGON</span>
+                    </div>
+                    <div class="state-transition">
+                        <span class="transition-label">2.5s auto</span>
+                        <div class="transition-arrow"></div>
+                    </div>
+                    <div class="state-node state-node-red">
+                        <span class="state-id">2</span>
+                        <span class="state-name">DRAGON</span>
+                    </div>
+                    <div class="state-transition">
+                        <span class="transition-label">fist→open</span>
+                        <div class="transition-arrow"></div>
+                    </div>
+                    <div class="state-node state-node-morph">
+                        <span class="state-id">3</span>
+                        <span class="state-name">MORPH→LILY</span>
+                    </div>
+                    <div class="state-transition">
+                        <span class="transition-label">2.5s auto</span>
+                        <div class="transition-arrow"></div>
+                    </div>
+                    <div class="state-node state-node-pink">
+                        <span class="state-id">4</span>
+                        <span class="state-name">LILY</span>
+                    </div>
+                    <div class="state-transition">
+                        <span class="transition-label">pinch</span>
+                        <div class="transition-arrow"></div>
+                    </div>
+                    <div class="state-node state-node-white">
+                        <span class="state-id">5</span>
+                        <span class="state-name">CUBE OPEN</span>
+                    </div>
+                </div>
+                <div class="state-reset-arrow">
+                    <span>Both hands open → Reset</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack Section -->
+    <section id="tech" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Technology</span>
+                <h2 class="section-title">Built With <span class="gradient-text">Precision</span></h2>
+            </div>
+            <div class="tech-grid">
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-python">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                    </div>
+                    <h4>Python</h4>
+                    <p>Core gesture detection engine with real-time webcam processing and timed state machine.</p>
+                    <div class="tech-tags">
+                        <span>3.13+</span>
+                        <span>asyncio</span>
+                    </div>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-mp">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 10-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-2V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/></svg>
+                    </div>
+                    <h4>MediaPipe</h4>
+                    <p>Google's hand landmarker model — 21 keypoints per hand with GPU-accelerated inference.</p>
+                    <div class="tech-tags">
+                        <span>Tasks API</span>
+                        <span>float16</span>
+                    </div>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-cv">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </div>
+                    <h4>OpenCV</h4>
+                    <p>Webcam capture, frame processing, mirror flip, and real-time debug overlay rendering.</p>
+                    <div class="tech-tags">
+                        <span>4.10</span>
+                        <span>1280×720</span>
+                    </div>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-osc">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0"/></svg>
+                    </div>
+                    <h4>OSC</h4>
+                    <p>UDP-based Open Sound Control protocol bridging Python and TouchDesigner in real time.</p>
+                    <div class="tech-tags">
+                        <span>Port 7000</span>
+                        <span>python-osc</span>
+                    </div>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-td">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    </div>
+                    <h4>TouchDesigner</h4>
+                    <p>Real-time 3D rendering engine — SOPs for geometry, CHOPs for timing, TOPs for compositing.</p>
+                    <div class="tech-tags">
+                        <span>2023+</span>
+                        <span>Render Pipeline</span>
+                    </div>
+                </div>
+                <div class="tech-card">
+                    <div class="tech-icon tech-icon-glsl">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    </div>
+                    <h4>GLSL</h4>
+                    <p>Custom vertex + fragment shaders with noise, swirl, and bloom for cinematic particle effects.</p>
+                    <div class="tech-tags">
+                        <span>Vertex</span>
+                        <span>Fragment</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Setup Section -->
+    <section id="setup" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Quick Start</span>
+                <h2 class="section-title">Get <span class="gradient-text">Running</span></h2>
+                <p class="section-desc">
+                    Two processes, one experience. Start the Python gesture sender, then open the TouchDesigner network.
+                </p>
+            </div>
+            <div class="setup-steps">
+                <div class="setup-step">
+                    <div class="step-number">01</div>
+                    <div class="step-content">
+                        <h4>Clone & Install</h4>
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-lang">bash</span>
+                                <button class="code-copy" onclick="copyCode(this)" aria-label="Copy code">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                            </div>
+                            <pre><code>git clone https://github.com/atharvawagh-03/Morphora.git
+cd Morphora/python
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt</code></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="setup-step">
+                    <div class="step-number">02</div>
+                    <div class="step-content">
+                        <h4>Run Python Gesture Sender</h4>
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-lang">bash</span>
+                                <button class="code-copy" onclick="copyCode(this)" aria-label="Copy code">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                            </div>
+                            <pre><code>python main.py</code></pre>
+                        </div>
+                        <p class="step-note">The hand landmarker model auto-downloads on first run (~10MB).</p>
+                    </div>
+                </div>
+                <div class="setup-step">
+                    <div class="step-number">03</div>
+                    <div class="step-content">
+                        <h4>Open TouchDesigner</h4>
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-lang">TouchDesigner Textport</span>
+                                <button class="code-copy" onclick="copyCode(this)" aria-label="Copy code">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                            </div>
+                            <pre><code>exec(open(r'D:/Morphora/touchdesigner/scripts/build_network.py').read())</code></pre>
+                        </div>
+                        <p class="step-note">Auto-builds the entire TD network — OSC, timers, model SOPs, GLSL, and render pipeline.</p>
+                    </div>
+                </div>
+                <div class="setup-step">
+                    <div class="step-number">04</div>
+                    <div class="step-content">
+                        <h4>Test Without TouchDesigner</h4>
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-lang">bash</span>
+                                <button class="code-copy" onclick="copyCode(this)" aria-label="Copy code">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                            </div>
+                            <pre><code># OSC monitor (Terminal 2)
+python test_osc_monitor.py
+
+# Simulate gestures (no webcam)
+python simulate_gestures.py
+
+# Unit tests
+python test_state_machine.py</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Project Structure -->
+    <section id="structure" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Source Code</span>
+                <h2 class="section-title">Project <span class="gradient-text">Structure</span></h2>
+            </div>
+            <div class="structure-tree">
+                <div class="tree-block">
+                    <pre class="tree-pre"><code>Morphora/
+├── python/                    <span class="tree-comment"># Gesture detection + OSC sender</span>
+│   ├── main.py                <span class="tree-comment"># Entry point — webcam loop</span>
+│   ├── config.py              <span class="tree-comment"># All thresholds & constants</span>
+│   ├── hand_tracker.py        <span class="tree-comment"># MediaPipe Tasks wrapper</span>
+│   ├── gesture_detector.py    <span class="tree-comment"># Geometric classifier</span>
+│   ├── state_machine.py       <span class="tree-comment"># 6-state FSM</span>
+│   ├── osc_sender.py          <span class="tree-comment"># python-osc client</span>
+│   ├── simulate_gestures.py   <span class="tree-comment"># OSC demo (no webcam)</span>
+│   ├── test_state_machine.py  <span class="tree-comment"># Unit checks</span>
+│   └── test_osc_monitor.py    <span class="tree-comment"># Live OSC listener</span>
+│
+├── touchdesigner/             <span class="tree-comment"># TD project & assets</span>
+│   ├── main.toe               <span class="tree-comment"># Main TD project file</span>
+│   ├── SETUP.md               <span class="tree-comment"># Build guide</span>
+│   ├── models/                <span class="tree-comment"># 10K-point OBJ clouds</span>
+│   ├── shaders/               <span class="tree-comment"># GLSL vert + frag</span>
+│   └── scripts/               <span class="tree-comment"># Auto-build + handlers</span>
+│
+├── tools/                     <span class="tree-comment"># Point cloud generator</span>
+├── assets/                    <span class="tree-comment"># Textures & references</span>
+└── docs/                      <span class="tree-comment"># Testing & troubleshooting</span></code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer id="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-icon">◇</span>
+                    <span class="logo-text">Morphora</span>
+                    <p class="footer-tagline">Gesture-controlled real-time 3D particle morphing.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h5>Project</h5>
+                        <a href="https://github.com/atharvawagh-03/Morphora" target="_blank" rel="noopener">GitHub</a>
+                        <a href="https://github.com/atharvawagh-03/Morphora/issues" target="_blank" rel="noopener">Issues</a>
+                        <a href="https://github.com/atharvawagh-03/Morphora/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+                    </div>
+                    <div class="footer-col">
+                        <h5>Docs</h5>
+                        <a href="#setup">Quick Start</a>
+                        <a href="#architecture">Architecture</a>
+                        <a href="#gestures">Gestures</a>
+                    </div>
+                    <div class="footer-col">
+                        <h5>Stack</h5>
+                        <a href="https://mediapipe.dev" target="_blank" rel="noopener">MediaPipe</a>
+                        <a href="https://derivative.ca" target="_blank" rel="noopener">TouchDesigner</a>
+                        <a href="https://opencv.org" target="_blank" rel="noopener">OpenCV</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Built with Python · MediaPipe · OpenCV · OSC · TouchDesigner · GLSL</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

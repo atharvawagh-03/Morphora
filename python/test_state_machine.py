@@ -1,5 +1,10 @@
 """Quick state machine transition tests — no pytest required."""
 
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from state_machine import StateMachine
 from config import SystemState
 
