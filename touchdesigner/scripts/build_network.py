@@ -178,9 +178,14 @@ def onValueChange(channel, sampleIndex, val, prev):
     add_pts = geo.create(addSOP, "add_particles")
     _connect(switch, add_pts, 0)
     _set(add_pts, ["addparticle", "allpoints"], 1)
-    add_pts.render = True
-    add_pts.display = True
-    _pos(add_pts, 300, 0)
+    _set(add_pts, "addp", 1)
+    _pos(add_pts, 300, 50)
+
+    out_geo = geo.create(nullSOP, "out1")
+    _connect(add_pts, out_geo, 0)
+    out_geo.render = True
+    out_geo.display = True
+    _pos(out_geo, 300, -100)
 
     # Particle Material: Point sprites with point colors
     mat_pts = root.create(pointMAT, "mat_particles")
