@@ -41,7 +41,7 @@ def main() -> int:
     prev_time = time.monotonic()
     fps = 0.0
 
-    print("Morphora gesture sender running. OSC → 127.0.0.1:7000")
+    print("Morphora gesture sender running. OSC -> 127.0.0.1:7000")
     print("Press q in debug window to quit.")
 
     try:

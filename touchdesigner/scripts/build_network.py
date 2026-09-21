@@ -31,8 +31,7 @@ def _pos(op, x, y):
 def _set(op, names, val):
     if isinstance(names, str):
         names = [names]
-        
-    # Check if assigning OP object directly (e.g. material = mat_pts or mat_pts.path/name)
+
     val_str = getattr(val, "path", getattr(val, "name", val))
 
     for name in names:
@@ -71,64 +70,136 @@ def build():
     if not root:
         root = op("/")
 
-    # Clear old nodes in /project1
+    # ── Clear old nodes ──────────────────────────────────────────────────
     for child in list(root.children):
         try:
             child.destroy()
         except Exception:
             pass
 
-    # 1. OSC Receiver on Port 7000
+    print("Building Morphora network...")
+
+    # =====================================================================
+    # 1. OSC RECEIVER
+    # =====================================================================
     osc = root.create(oscinCHOP, "osc_in")
     _set(osc, ["port", "netport", "networkport"], OSC_PORT)
-    _pos(osc, -600, 400)
+    _pos(osc, -800, 400)
+    print("  [1/9] OSC In CHOP on port 7000")
+
+    # ── Per-channel Select CHOPs ─────────────────────────────────────────
+    sel_state = root.create(selectCHOP, "select_state")
+    _set(sel_state, ["chop", "chops"], osc.name)
+    _set(sel_state, ["channames", "channelnames"], "/gesture/state")
+    _pos(sel_state, -600, 500)
 
     sel_event = root.create(selectCHOP, "select_event")
     _set(sel_event, ["chop", "chops"], osc.name)
-    _set(sel_event, ["channames", "channelnames"], "*")
-    _pos(sel_event, -400, 400)
+    _set(sel_event, ["channames", "channelnames"], "/gesture/event")
+    _pos(sel_event, -600, 400)
 
-    # State constant: 0 = Butterfly, 1 = Dragon, 2 = Lily
+    sel_left = root.create(selectCHOP, "select_left")
+    _set(sel_left, ["chop", "chops"], osc.name)
+    _set(sel_left, ["channames", "channelnames"], "/gesture/left")
+    _pos(sel_left, -600, 300)
+
+    sel_right = root.create(selectCHOP, "select_right")
+    _set(sel_right, ["chop", "chops"], osc.name)
+    _set(sel_right, ["channames", "channelnames"], "/gesture/right")
+    _pos(sel_right, -600, 200)
+
+    # =====================================================================
+    # 2. STATE MANAGEMENT — drive Switch SOP from OSC state integer
+    # =====================================================================
+    # Python sends state as int: 0=BUTTERFLY, 1=MORPH_TO_DRAGON, 2=DRAGON,
+    #                            3=MORPH_TO_LILY, 4=LILY, 5=CUBE_OPEN
+    #
+    # Switch SOP needs a blend index: 0=butterfly, 1=dragon, 2=lily
+    # Mapping:
+    #   state 0 (BUTTERFLY)       → switch_index = 0.0
+    #   state 1 (MORPH_TO_DRAGON) → switch_index = 0.0 → 1.0 (animated by lag)
+    #   state 2 (DRAGON)          → switch_index = 1.0
+    #   state 3 (MORPH_TO_LILY)   → switch_index = 1.0 → 2.0 (animated by lag)
+    #   state 4 (LILY)            → switch_index = 2.0
+    #   state 5 (CUBE_OPEN)       → switch_index = 2.0 (cube animates separately)
+
+    # Constant CHOP holds the target switch index + cube_open flag
     state_const = root.create(constantCHOP, "target_morph_state")
     _set(state_const, "name0", "target_index")
     _set(state_const, "value0", 0.0)
     _set(state_const, "name1", "cube_open")
     _set(state_const, "value1", 0.0)
-    _pos(state_const, -400, 250)
+    _pos(state_const, -400, 500)
 
-    # Smooth 2.5s lag filter between states
+    # CHOP Execute DAT: reads the OSC state integer and maps it
+    state_handler = root.create(chopexecuteDAT, "state_handler")
+    _set(state_handler, ["chop", "chops"], sel_state.name)
+    _set(state_handler, ["valuechange", "valuechangef"], True)
+    state_handler.text = '''# State handler — maps OSC state integer to Switch SOP index
+def onValueChange(channel, sampleIndex, val, prev):
+    c = op('target_morph_state')
+    if not c:
+        return
+
+    state = int(val)
+
+    # Map state integer to switch index (0=butterfly, 1=dragon, 2=lily)
+    state_to_index = {
+        0: 0.0,   # BUTTERFLY
+        1: 1.0,   # MORPH_TO_DRAGON (lag will animate 0→1)
+        2: 1.0,   # DRAGON
+        3: 2.0,   # MORPH_TO_LILY (lag will animate 1→2)
+        4: 2.0,   # LILY
+        5: 2.0,   # CUBE_OPEN (lily stays, cube animates)
+    }
+
+    # Map cube_open flag
+    cube_open = 1.0 if state == 5 else 0.0
+
+    target_idx = state_to_index.get(state, 0.0)
+    c.par.value0 = target_idx
+    c.par.value1 = cube_open
+
+    debug(f"Morphora state={state} -> switch_index={target_idx}, cube={cube_open}")
+    return
+'''
+    _pos(state_handler, -400, 600)
+
+    # Smooth lag filter — animates between switch indices over 2.5s
     lag = root.create(lagCHOP, "morph_lag")
     _set(lag, ["lag1", "lag"], MORPH_SEC)
     _set(lag, ["lag2"], MORPH_SEC)
     _connect(state_const, lag, 0)
-    _pos(lag, -200, 250)
+    _pos(lag, -200, 500)
 
-    # OSC Event Handler
-    handler = root.create(chopexecuteDAT, "event_handler")
-    _set(handler, ["chop", "chops"], sel_event.name)
-    _set(handler, ["valuechange", "valuechangef"], True)
-    handler.text = '''# OSC Handler for Morphora
+    # ── Event handler for string events from /gesture/event ──────────────
+    event_handler = root.create(chopexecuteDAT, "event_handler")
+    _set(event_handler, ["chop", "chops"], sel_event.name)
+    _set(event_handler, ["valuechange", "valuechangef"], True)
+    event_handler.text = '''# OSC Event Handler for Morphora
+# The /gesture/event channel carries string values like "left_fist_open"
+# We check the VALUE of the channel, not the channel name.
 def onValueChange(channel, sampleIndex, val, prev):
-    if val <= 0:
-        return
-    c = op('target_morph_state')
-    if not c:
-        return
-    cur = c.par.value0.eval()
+    event = str(val).strip().strip('"')
 
-    if channel.name in ('left_fist_open', 'morph_next'):
-        c.par.value0 = (cur + 1) % 3
-    elif channel.name in ('both_open', 'reset'):
-        c.par.value0 = 0.0
-        c.par.value1 = 0.0
-    elif channel.name in ('right_pinch', 'toggle_cube'):
-        c.par.value1 = 1.0 if c.par.value1.eval() < 0.5 else 0.0
+    if not event or event == '0' or event == '0.0':
+        return
+
+    debug(f"Morphora event received: {event}")
+
+    # Events are informational — state changes are driven by /gesture/state
+    # This handler is for logging/debugging and any additional TD-side logic
+    return
 '''
-    _pos(handler, -400, 80)
+    _pos(event_handler, -400, 300)
 
-    # 2. 10,000-Particle Geometry (Self-contained inside geo_particles)
+    print("  [2/9] State management + OSC event handling")
+
+    # =====================================================================
+    # 3. PARTICLE GEOMETRY — 10,000-point models
+    # =====================================================================
     geo = root.create(geometryCOMP, "geo_particles")
-    _pos(geo, 400, 150)
+    _pos(geo, 400, 200)
     for c in list(geo.children):
         c.destroy()
 
@@ -142,11 +213,14 @@ def onValueChange(channel, sampleIndex, val, prev):
     x = 100
     for name, fname in model_files.items():
         path = os.path.join(MODELS, fname).replace("\\", "/")
+        if not os.path.isfile(path):
+            print(f"  WARNING: Model file not found: {path}")
+
         f = geo.create(fileSOP, "file_" + name)
         _set(f, "file", path)
         _pos(f, x, 600)
 
-        # Color the points: Butterfly=Cyan (#00c2ff), Dragon=Red (#ff1e2d), Lily=Pink (#c2185b)
+        # Color the points
         col = geo.create(pointSOP, "color_" + name)
         _set(col, ["color", "keepcolor"], True)
         _set(col, "doclr", 1)
@@ -158,7 +232,7 @@ def onValueChange(channel, sampleIndex, val, prev):
             _set(col, ["cr", "colorr"], 1.0)
             _set(col, ["cg", "colorg"], 0.15)
             _set(col, ["cb", "colorb"], 0.18)
-        else:
+        else:  # lily
             _set(col, ["cr", "colorr"], 0.95)
             _set(col, ["cg", "colorg"], 0.15)
             _set(col, ["cb", "colorb"], 0.60)
@@ -170,113 +244,243 @@ def onValueChange(channel, sampleIndex, val, prev):
         _connect(col, n, 0)
         _pos(n, x, 300)
         outs[name] = n
-        x += 200
+        x += 250
 
-    # Switch SOP with GPU Point Cloud Blending
+    # Switch SOP with blending — driven by morph_lag['target_index']
     switch = geo.create(switchSOP, "switch_morph")
     _connect(outs["butterfly"], switch, 0)
     _connect(outs["dragon"], switch, 1)
     _connect(outs["lily"], switch, 2)
+
+    # Enable blend mode for smooth morphing
     _set(switch, ["blend", "blendinputs"], True)
+
+    # Expression to read the lagged index from the parent level
+    # morph_lag lives in /project1, geo_particles is /project1/geo_particles
+    # so from inside geo_particles, we need op('../morph_lag')
     try:
         switch.par.index.expr = "op('../morph_lag')['target_index']"
     except Exception:
         try:
             switch.par.input.expr = "op('../morph_lag')['target_index']"
         except Exception:
-            pass
+            print("  WARNING: Could not set Switch SOP expression")
+
     _pos(switch, 300, 150)
 
+    # ── CRITICAL: Add SOP converts raw vertices into renderable particles ──
+    # The OBJ files contain only vertex positions (no polygon faces).
+    # Without an Add SOP creating particle primitives, TD has nothing to render.
+    add_pts = geo.create(addSOP, "add_particles")
+    _connect(switch, add_pts, 0)
+    # "Add Particle System for All Points" — makes each point a renderable particle
+    _set(add_pts, ["stdswitcher", "ptstype"], 1)       # Particles tab
+    _set(add_pts, ["addparticlesystem", "addp"], 1)     # Add Particle System = ON
+    _set(add_pts, ["particletype", "addparticle"], 1)   # Add All Points as particles
+    _set(add_pts, ["allpoints", "allp"], 1)             # Use all points
+    # Also try the simpler legacy approach
+    _set(add_pts, ["points", "pts"], 1)
+    _pos(add_pts, 300, 50)
+
+    # Null SOP output — set as display/render flag
     out_geo = geo.create(nullSOP, "out1")
-    _connect(switch, out_geo, 0)
+    _connect(add_pts, out_geo, 0)
     try:
         out_geo.render = True
         out_geo.display = True
     except Exception:
         pass
-    _pos(out_geo, 300, -100)
+    _pos(out_geo, 300, -50)
 
-    # Enable Point Rendering directly on the Geometry COMP
-    _set(geo, ["renderpoints", "points"], 1)
-    _set(geo, ["pointsize", "pointsize3d"], 8.0)
+    # Point rendering on the Geometry COMP — belt and suspenders
+    _set(geo, ["renderpoints", "points"], 1)             # Render as points
+    _set(geo, ["pointsize", "pointsize3d", "psize"], 8.0)  # Visible point size
     _set(geo, "render", True)
+    _set(geo, "display", True)
 
-    # Particle Material: Point sprites with point colors
+    # Also try setting material-level point size
+    # (some TD versions use material pointsize, others use geo COMP pointsize)
+
+    print("  [3/9] 3 x 10,000-point models loaded")
+
+    # =====================================================================
+    # 4. PARTICLE MATERIAL — point sprite with vertex colors
+    # =====================================================================
+    # Try pointSpriteMAT first (best for particle rendering), then constantMAT
+    mat_pts = None
+    mat_type = "unknown"
     try:
         mat_pts = root.create(pointSpriteMAT, "mat_particles")
-    except Exception:
-        try:
-            mat_pts = root.create(pointMAT, "mat_particles")
-        except Exception:
-            mat_pts = root.create(constantMAT, "mat_particles")
-
-    _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
-    _set(mat_pts, ["constant", "unlit"], True)
-    _set(mat_pts, ["colormode", "pointcolormode"], 1)
-    _pos(mat_pts, 200, 150)
-    _set(geo, ["material", "mat"], mat_pts.path)
-
-    # 3. Rotating Wireframe Cube
-    geo_cube = root.create(geometryCOMP, "geo_cube")
-    _pos(geo_cube, 400, -150)
-    for c in list(geo_cube.children):
-        c.destroy()
-    box = geo_cube.create(boxSOP, "box1")
-    _set(box, ["sizex", "sizey", "sizez"], 1.6)
-    box.render = True
-    box.display = True
-
-    try:
-        geo_cube.par.ry.expr = "absTime.seconds * 12"
-        geo_cube.par.rx.expr = "15 + sin(absTime.seconds * 0.5) * 5"
-        geo_cube.par.uniformscale.expr = "1.2 + op('morph_lag')['cube_open'] * 0.5"
+        mat_type = "pointSpriteMAT"
+        _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
+        _set(mat_pts, ["usevertexcolor", "pointcolormode", "colormode"], 1)
     except Exception:
         pass
 
+    if mat_pts is None:
+        try:
+            mat_pts = root.create(pointMAT, "mat_particles")
+            mat_type = "pointMAT"
+            _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
+        except Exception:
+            pass
+
+    if mat_pts is None:
+        mat_pts = root.create(constantMAT, "mat_particles")
+        mat_type = "constantMAT"
+
+    # Set white color so vertex Cd passes through (white × Cd = Cd)
+    _set(mat_pts, ["colorr", "cr"], 1.0)
+    _set(mat_pts, ["colorg", "cg"], 1.0)
+    _set(mat_pts, ["colorb", "cb"], 1.0)
+    _set(mat_pts, ["alpha", "colora"], 1.0)
+    _pos(mat_pts, 200, 200)
+
+    # Assign material to geo_particles
+    try:
+        geo.par.material = mat_pts
+    except Exception:
+        try:
+            geo.par.material = mat_pts.path
+        except Exception:
+            _set(geo, ["material", "mat"], mat_pts.path)
+
+    print(f"  [4/9] Particle material ({mat_type})")
+
+    # =====================================================================
+    # 5. WIREFRAME CUBE
+    # =====================================================================
+    geo_cube = root.create(geometryCOMP, "geo_cube")
+    _pos(geo_cube, 400, -100)
+    for c in list(geo_cube.children):
+        c.destroy()
+
+    box = geo_cube.create(boxSOP, "box1")
+    _set(box, ["sizex", "sx"], 1.6)
+    _set(box, ["sizey", "sy"], 1.6)
+    _set(box, ["sizez", "sz"], 1.6)
+    try:
+        box.render = True
+        box.display = True
+    except Exception:
+        pass
+
+    # Cube rotation
+    try:
+        geo_cube.par.ry.expr = "absTime.seconds * 12"
+        geo_cube.par.rx.expr = "15 + sin(absTime.seconds * 0.5) * 5"
+    except Exception:
+        pass
+
+    # Cube scale driven by cube_open flag from morph_lag
+    try:
+        geo_cube.par.sx.expr = "1.2 + op('morph_lag')['cube_open'] * 0.5"
+        geo_cube.par.sy.expr = "1.2 + op('morph_lag')['cube_open'] * 0.5"
+        geo_cube.par.sz.expr = "1.2 + op('morph_lag')['cube_open'] * 0.5"
+    except Exception:
+        pass
+
+    _set(geo_cube, "render", True)
+    _set(geo_cube, "display", True)
+
+    # Cube material — wireframe
     mat_cube = root.create(constantMAT, "mat_cube")
     _set(mat_cube, ["wireframe", "wireframefront"], True)
     _set(mat_cube, ["wirewidth", "width"], 2)
     _set(mat_cube, ["colorr", "cr"], 0.0)
     _set(mat_cube, ["colorg", "cg"], 0.6)
     _set(mat_cube, ["colorb", "cb"], 0.95)
-    _pos(mat_cube, 200, -150)
-    _set(geo_cube, ["material", "mat"], mat_cube.path)
+    _set(mat_cube, ["alpha", "colora"], 0.5)
+    _pos(mat_cube, 200, -100)
 
-    # 4. Camera
+    try:
+        geo_cube.par.material = mat_cube
+    except Exception:
+        try:
+            geo_cube.par.material = mat_cube.path
+        except Exception:
+            _set(geo_cube, ["material", "mat"], mat_cube.path)
+
+    print("  [5/9] Wireframe cube")
+
+    # =====================================================================
+    # 6. CAMERA
+    # =====================================================================
     cam = root.create(cameraCOMP, "cam1")
     _set(cam, "tx", 0)
     _set(cam, "ty", 0)
-    _set(cam, "tz", 3.2)
-    _pos(cam, 0, -250)
+    _set(cam, "tz", 3.5)
+    _pos(cam, 0, -300)
+    print("  [6/9] Camera")
 
-    # 5. Render & Bloom Pipeline
+    # =====================================================================
+    # 7. LIGHT — required for some materials, helps visibility
+    # =====================================================================
+    light = root.create(lightCOMP, "light1")
+    _set(light, "tx", 2.0)
+    _set(light, "ty", 3.0)
+    _set(light, "tz", 4.0)
+    _set(light, ["dimmer", "intensity"], 1.0)
+    _pos(light, 0, -200)
+
+    # Optional second fill light
+    light2 = root.create(lightCOMP, "light2")
+    _set(light2, "tx", -2.0)
+    _set(light2, "ty", -1.0)
+    _set(light2, "tz", 3.0)
+    _set(light2, ["dimmer", "intensity"], 0.4)
+    _pos(light2, 0, -100)
+
+    print("  [7/9] Lights")
+
+    # =====================================================================
+    # 8. RENDER & BLOOM PIPELINE
+    # =====================================================================
     render = root.create(renderTOP, "render1")
     _set(render, ["camera", "cam"], cam.path)
-    _set(render, ["geometry", "geo"], "*")
     _set(render, ["resolutionw", "resw"], 1920)
     _set(render, ["resolutionh", "resh"], 1080)
+
+    # Set geometry — use wildcard to capture both geo_particles and geo_cube
+    _set(render, ["geometry", "geo"], "*")
+
+    # Explicit lights
+    _set(render, ["lights", "light"], "*")
+
     _pos(render, 700, -100)
 
+    # Background — dark/black
+    _set(render, ["bgcolorr", "bgr"], 0.02)
+    _set(render, ["bgcolorg", "bgg"], 0.02)
+    _set(render, ["bgcolorb", "bgb"], 0.04)
+
+    # Bloom post-processing
     try:
         bloom = root.create(bloomTOP, "bloom1")
-        _set(bloom, "threshold", 0.30)
-        _set(bloom, "intensity", 1.8)
+        _set(bloom, "threshold", 0.25)
+        _set(bloom, ["intensity", "bloomintensity"], 2.0)
+        _set(bloom, ["size", "bloomsize"], 10)
         _connect(render, bloom, 0)
         _pos(bloom, 900, -100)
         last_top = bloom
     except Exception:
+        print("  Note: Bloom TOP not available, skipping")
         last_top = render
 
-    # 6. Output TOP directly in /project1
+    print("  [8/9] Render + bloom pipeline")
+
+    # =====================================================================
+    # 9. OUTPUT & WINDOW
+    # =====================================================================
     out = root.create(nullTOP, "out1")
     _connect(last_top, out, 0)
     out.display = True
     out.render = True
     _pos(out, 1100, -100)
 
-    # 7. Window COMP for Perform Mode
+    # Window COMP for perform mode (F1)
     win = root.create(windowCOMP, "window1")
-    _set(win, ["winop", "operator"], out.name)
+    _set(win, ["winop", "operator"], out.path)
     _set(win, "justifyh", "center")
     _set(win, "justifyv", "center")
     _pos(win, 1100, -300)
@@ -291,16 +495,36 @@ def onValueChange(channel, sampleIndex, val, prev):
     except Exception:
         pass
 
+    print("  [9/9] Output + Window COMP")
+
+    # =====================================================================
+    # DONE
+    # =====================================================================
+    print("")
     print("=" * 60)
-    print("Morphora 3D Visual Network Successfully Built!")
-    print("  ✓ 10,000 Glowing Butterfly Particles (Cyan)")
-    print("  ✓ 10,000 Glowing Dragon Particles (Red)")
-    print("  ✓ 10,000 Glowing Lily Particles (Pink)")
-    print("  ✓ Particle System Add SOP + PointMAT Active")
-    print("  ✓ Rotating Wireframe Cube Active")
-    print("  ✓ Bloom Glow Wired Directly to out1 & Perform Mode")
+    print("  Morphora 3D Network Successfully Built!")
     print("=" * 60)
-    print("Press F1 now to view the glowing Butterfly inside the cube!")
+    print("")
+    print("  ✓ OSC In on port 7000")
+    print("  ✓ State handler maps /gesture/state → Switch SOP blend")
+    print("  ✓ 10,000-point Butterfly (Cyan)")
+    print("  ✓ 10,000-point Dragon (Red)")
+    print("  ✓ 10,000-point Lily (Pink)")
+    print("  ✓ constantMAT with vertex colors")
+    print("  ✓ Wireframe cube with scale animation")
+    print("  ✓ Camera + 2 Lights")
+    print("  ✓ Render + Bloom → out1")
+    print("  ✓ Window COMP for Perform Mode")
+    print("")
+    print("  NEXT STEPS:")
+    print("  1. Press F1 to enter Perform Mode")
+    print("  2. Run: python main.py (or simulate_gestures.py)")
+    print("  3. File → Save as touchdesigner/main.toe")
+    print("")
+    print("  VERIFICATION:")
+    print("  - You should see CYAN particles (butterfly) on screen")
+    print("  - Check osc_in CHOP for incoming channels")
+    print("  - Run simulate_gestures.py to test morphing")
     print("=" * 60)
 
 

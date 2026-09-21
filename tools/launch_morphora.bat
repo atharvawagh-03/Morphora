@@ -21,11 +21,19 @@ if not exist "python\venv\Scripts\python.exe" (
 
 REM 2. Launch TouchDesigner (if installed)
 echo [1/2] Launching TouchDesigner network...
-if exist "touchdesigner\main.toe" (
+set "TD_EXE=C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe"
+if exist "%TD_EXE%" (
+    if exist "touchdesigner\main.toe" (
+        start "" "%TD_EXE%" "%CD%\touchdesigner\main.toe"
+    ) else (
+        start "" "%TD_EXE%"
+    )
+    ping 127.0.0.1 -n 4 >nul
+) else if exist "touchdesigner\main.toe" (
     start "" "touchdesigner\main.toe"
-    timeout /t 3 >nul
+    ping 127.0.0.1 -n 4 >nul
 ) else (
-    echo [WARNING] touchdesigner\main.toe not found. Proceeding with Python only.
+    echo [WARNING] TouchDesigner not found. Proceeding with Python only.
 )
 
 REM 3. Launch Python Gesture Tracker
