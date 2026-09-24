@@ -220,6 +220,12 @@ def onValueChange(channel, sampleIndex, val, prev):
         _set(f, "file", path)
         _pos(f, x, 600)
 
+        # Facet SOP — unique points (per SETUP.md)
+        facet = geo.create(facetSOP, "facet_" + name)
+        _set(facet, ["unique", "uniquepoints"], True)
+        _connect(f, facet, 0)
+        _pos(facet, x, 525)
+
         # Color the points
         col = geo.create(pointSOP, "color_" + name)
         _set(col, ["color", "keepcolor"], True)
@@ -237,7 +243,7 @@ def onValueChange(channel, sampleIndex, val, prev):
             _set(col, ["cg", "colorg"], 0.15)
             _set(col, ["cb", "colorb"], 0.60)
 
-        _connect(f, col, 0)
+        _connect(facet, col, 0)
         _pos(col, x, 450)
 
         n = geo.create(nullSOP, name + "_out")
@@ -245,6 +251,19 @@ def onValueChange(channel, sampleIndex, val, prev):
         _pos(n, x, 300)
         outs[name] = n
         x += 250
+
+    # ── Diagnostics: check File SOP loaded correctly ─────────────────────
+    for name in model_files:
+        try:
+            fsop = geo.op("file_" + name)
+            if fsop is not None:
+                npts = fsop.numPoints if hasattr(fsop, 'numPoints') else '?'
+                nprims = fsop.numPrims if hasattr(fsop, 'numPrims') else '?'
+                print(f"    file_{name}: {npts} points, {nprims} prims")
+            else:
+                print(f"    WARNING: file_{name} SOP not found!")
+        except Exception as e:
+            print(f"    file_{name} diag error: {e}")
 
     # Switch SOP with blending — driven by morph_lag['target_index']
     switch = geo.create(switchSOP, "switch_morph")
@@ -256,8 +275,6 @@ def onValueChange(channel, sampleIndex, val, prev):
     _set(switch, ["blend", "blendinputs"], True)
 
     # Expression to read the lagged index from the parent level
-    # morph_lag lives in /project1, geo_particles is /project1/geo_particles
-    # so from inside geo_particles, we need op('../morph_lag')
     try:
         switch.par.index.expr = "op('../morph_lag')['target_index']"
     except Exception:
@@ -268,72 +285,58 @@ def onValueChange(channel, sampleIndex, val, prev):
 
     _pos(switch, 300, 150)
 
-    # ── CRITICAL: Add SOP converts raw vertices into renderable particles ──
-    # The OBJ files contain only vertex positions (no polygon faces).
-    # Without an Add SOP creating particle primitives, TD has nothing to render.
-    add_pts = geo.create(addSOP, "add_particles")
-    _connect(switch, add_pts, 0)
-    # "Add Particle System for All Points" — makes each point a renderable particle
-    _set(add_pts, ["stdswitcher", "ptstype"], 1)       # Particles tab
-    _set(add_pts, ["addparticlesystem", "addp"], 1)     # Add Particle System = ON
-    _set(add_pts, ["particletype", "addparticle"], 1)   # Add All Points as particles
-    _set(add_pts, ["allpoints", "allp"], 1)             # Use all points
-    # Also try the simpler legacy approach
-    _set(add_pts, ["points", "pts"], 1)
-    _pos(add_pts, 300, 50)
-
-    # Null SOP output — set as display/render flag
+    # ── Output Null SOP — NO Convert/Add SOP needed ──────────────────────
+    # OBJ files now contain proper triangle faces, so File SOP creates
+    # polygon primitives directly. The material handles point rendering.
     out_geo = geo.create(nullSOP, "out1")
-    _connect(add_pts, out_geo, 0)
+    _connect(switch, out_geo, 0)
     try:
         out_geo.render = True
         out_geo.display = True
     except Exception:
         pass
-    _pos(out_geo, 300, -50)
+    _pos(out_geo, 300, 0)
 
-    # Point rendering on the Geometry COMP — belt and suspenders
-    _set(geo, ["renderpoints", "points"], 1)             # Render as points
-    _set(geo, ["pointsize", "pointsize3d", "psize"], 8.0)  # Visible point size
+    # Geometry COMP rendering settings
     _set(geo, "render", True)
     _set(geo, "display", True)
-
-    # Also try setting material-level point size
-    # (some TD versions use material pointsize, others use geo COMP pointsize)
 
     print("  [3/9] 3 x 10,000-point models loaded")
 
     # =====================================================================
-    # 4. PARTICLE MATERIAL — point sprite with vertex colors
+    # 4. PARTICLE MATERIAL — constantMAT in GL_POINT draw mode
     # =====================================================================
-    # Try pointSpriteMAT first (best for particle rendering), then constantMAT
-    mat_pts = None
-    mat_type = "unknown"
-    try:
-        mat_pts = root.create(pointSpriteMAT, "mat_particles")
-        mat_type = "pointSpriteMAT"
-        _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
-        _set(mat_pts, ["usevertexcolor", "pointcolormode", "colormode"], 1)
-    except Exception:
-        pass
+    # constantMAT is universally available. We set its polygon draw mode
+    # to POINT so only vertices render (as point sprites), not filled faces.
+    mat_pts = root.create(constantMAT, "mat_particles")
 
-    if mat_pts is None:
-        try:
-            mat_pts = root.create(pointMAT, "mat_particles")
-            mat_type = "pointMAT"
-            _set(mat_pts, ["size", "pointsize", "psize"], 8.0)
-        except Exception:
-            pass
-
-    if mat_pts is None:
-        mat_pts = root.create(constantMAT, "mat_particles")
-        mat_type = "constantMAT"
-
-    # Set white color so vertex Cd passes through (white × Cd = Cd)
+    # White base color so vertex Cd passes through
     _set(mat_pts, ["colorr", "cr"], 1.0)
     _set(mat_pts, ["colorg", "cg"], 1.0)
     _set(mat_pts, ["colorb", "cb"], 1.0)
     _set(mat_pts, ["alpha", "colora"], 1.0)
+
+    # ── KEY FIX: Set polygon draw mode to POINT (not Fill/Wireframe) ─────
+    # In OpenGL terms: GL_POINT = only vertices are drawn as dots.
+    # TD constantMAT parameter 'polygondrawmode' or 'drawmode':
+    #   0 = Fill (solid surface), 1 = Line (wireframe), 2 = Point
+    # We try every known parameter name for this across TD versions.
+    point_mode_set = False
+    for pname in ["polygondrawmode", "drawmode", "fillmode", "polygonfront",
+                   "frontfacemode", "rendermode", "drawprim"]:
+        if _set(mat_pts, pname, 2):
+            print(f"    Set {pname} = 2 (Point mode) on mat_particles")
+            point_mode_set = True
+            break
+
+    if not point_mode_set:
+        # Fallback: try wireframe mode (at least shows edges, not filled tris)
+        _set(mat_pts, ["wireframe", "wireframefront"], True)
+        print("    Fallback: wireframe mode on mat_particles")
+
+    # Point size — larger = more visible
+    _set(mat_pts, ["pointsize", "psize"], 6.0)
+
     _pos(mat_pts, 200, 200)
 
     # Assign material to geo_particles
@@ -345,7 +348,7 @@ def onValueChange(channel, sampleIndex, val, prev):
         except Exception:
             _set(geo, ["material", "mat"], mat_pts.path)
 
-    print(f"  [4/9] Particle material ({mat_type})")
+    print(f"  [4/9] Particle material (constantMAT)")
 
     # =====================================================================
     # 5. WIREFRAME CUBE
