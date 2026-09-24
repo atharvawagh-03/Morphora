@@ -519,6 +519,50 @@ def onValueChange(channel, sampleIndex, val, prev):
     print("  ✓ Render + Bloom → out1")
     print("  ✓ Window COMP for Perform Mode")
     print("")
+
+    # ── DIAGNOSTIC DUMP ──────────────────────────────────────────────────
+    print("  DIAGNOSTICS:")
+    geo_p = root.op("geo_particles")
+    if geo_p:
+        # Check internal SOPs
+        for sop_name in ["file_butterfly", "file_dragon", "file_lily",
+                         "switch_morph", "out1"]:
+            s = geo_p.op(sop_name)
+            if s:
+                try:
+                    pts = s.numPoints if hasattr(s, 'numPoints') else '?'
+                    prims = s.numPrims if hasattr(s, 'numPrims') else '?'
+                    print(f"    {sop_name}: {pts} points, {prims} prims")
+                except Exception as e:
+                    print(f"    {sop_name}: error reading — {e}")
+            else:
+                print(f"    {sop_name}: NOT FOUND")
+
+        # Material info
+        try:
+            mat = geo_p.par.material.eval() if hasattr(geo_p.par, 'material') else None
+            print(f"    Material assigned: {mat}")
+        except Exception:
+            print(f"    Material: could not read")
+
+    # Dump ALL parameter names on mat_particles so we can find the correct one
+    mat_p = root.op("mat_particles")
+    if mat_p:
+        print("")
+        print("  MAT_PARTICLES PARAMETERS (for debugging draw mode):")
+        try:
+            all_pars = [p.name for p in mat_p.pars()
+                        if any(kw in p.name.lower()
+                               for kw in ['draw', 'wire', 'fill', 'poly',
+                                          'render', 'point', 'front', 'mode',
+                                          'prim'])]
+            for pn in all_pars:
+                pval = getattr(mat_p.par, pn).eval()
+                print(f"    {pn} = {pval}")
+        except Exception as e:
+            print(f"    Could not list parameters: {e}")
+
+    print("")
     print("  NEXT STEPS:")
     print("  1. Press F1 to enter Perform Mode")
     print("  2. Run: python main.py (or simulate_gestures.py)")
