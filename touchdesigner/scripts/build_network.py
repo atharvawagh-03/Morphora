@@ -304,38 +304,23 @@ def onValueChange(channel, sampleIndex, val, prev):
     print("  [3/9] 3 x 10,000-point models loaded")
 
     # =====================================================================
-    # 4. PARTICLE MATERIAL — constantMAT in GL_POINT draw mode
+    # 4. PARTICLE MATERIAL — constantMAT (filled polygon mode)
     # =====================================================================
-    # constantMAT is universally available. We set its polygon draw mode
-    # to POINT so only vertices render (as point sprites), not filled faces.
+    # OBJ files now have proper quad faces per point, so default fill
+    # rendering works. Each point appears as a tiny colored quad.
     mat_pts = root.create(constantMAT, "mat_particles")
 
-    # White base color so vertex Cd passes through
-    _set(mat_pts, ["colorr", "cr"], 1.0)
-    _set(mat_pts, ["colorg", "cg"], 1.0)
+    # Cyan base color (butterfly default) — vertex Cd overrides if present
+    _set(mat_pts, ["colorr", "cr"], 0.0)
+    _set(mat_pts, ["colorg", "cg"], 0.76)
     _set(mat_pts, ["colorb", "cb"], 1.0)
-    _set(mat_pts, ["alpha", "colora"], 1.0)
+    _set(mat_pts, ["alpha", "colora"], 0.9)
 
-    # ── KEY FIX: Set polygon draw mode to POINT (not Fill/Wireframe) ─────
-    # In OpenGL terms: GL_POINT = only vertices are drawn as dots.
-    # TD constantMAT parameter 'polygondrawmode' or 'drawmode':
-    #   0 = Fill (solid surface), 1 = Line (wireframe), 2 = Point
-    # We try every known parameter name for this across TD versions.
-    point_mode_set = False
-    for pname in ["polygondrawmode", "drawmode", "fillmode", "polygonfront",
-                   "frontfacemode", "rendermode", "drawprim"]:
-        if _set(mat_pts, pname, 2):
-            print(f"    Set {pname} = 2 (Point mode) on mat_particles")
-            point_mode_set = True
-            break
+    # CRITICAL: Disable wireframe — must be "off", NOT True/False
+    _set(mat_pts, "wireframe", "off")
 
-    if not point_mode_set:
-        # Fallback: try wireframe mode (at least shows edges, not filled tris)
-        _set(mat_pts, ["wireframe", "wireframefront"], True)
-        print("    Fallback: wireframe mode on mat_particles")
-
-    # Point size — larger = more visible
-    _set(mat_pts, ["pointsize", "psize"], 6.0)
+    # Enable vertex color blending if Cd attribute exists on geometry
+    _set(mat_pts, "applypointcolor", True)
 
     _pos(mat_pts, 200, 200)
 
@@ -348,7 +333,7 @@ def onValueChange(channel, sampleIndex, val, prev):
         except Exception:
             _set(geo, ["material", "mat"], mat_pts.path)
 
-    print(f"  [4/9] Particle material (constantMAT)")
+    print(f"  [4/9] Particle material (constantMAT, fill mode, cyan)")
 
     # =====================================================================
     # 5. WIREFRAME CUBE
@@ -412,7 +397,7 @@ def onValueChange(channel, sampleIndex, val, prev):
     cam = root.create(cameraCOMP, "cam1")
     _set(cam, "tx", 0)
     _set(cam, "ty", 0)
-    _set(cam, "tz", 3.5)
+    _set(cam, "tz", 3.0)
     _pos(cam, 0, -300)
     print("  [6/9] Camera")
 
@@ -460,9 +445,9 @@ def onValueChange(channel, sampleIndex, val, prev):
     # Bloom post-processing
     try:
         bloom = root.create(bloomTOP, "bloom1")
-        _set(bloom, "threshold", 0.25)
-        _set(bloom, ["intensity", "bloomintensity"], 2.0)
-        _set(bloom, ["size", "bloomsize"], 10)
+        _set(bloom, "threshold", 0.75)
+        _set(bloom, ["intensity", "bloomintensity"], 0.6)
+        _set(bloom, ["size", "bloomsize"], 4)
         _connect(render, bloom, 0)
         _pos(bloom, 900, -100)
         last_top = bloom
@@ -532,7 +517,11 @@ def onValueChange(channel, sampleIndex, val, prev):
                 try:
                     pts = s.numPoints if hasattr(s, 'numPoints') else '?'
                     prims = s.numPrims if hasattr(s, 'numPrims') else '?'
-                    print(f"    {sop_name}: {pts} points, {prims} prims")
+                    status = "OK" if (pts == 40000 or pts == 40002) and prims == 10000 else "UNEXPECTED"
+                    print(f"    {sop_name}: {pts} points, {prims} prims [{status}]")
+                    if status == "UNEXPECTED" and sop_name.startswith("file_"):
+                        print(f"      Expected: 40000 points, 10000 prims")
+                        print(f"      → Re-check OBJ files have quad faces")
                 except Exception as e:
                     print(f"    {sop_name}: error reading — {e}")
             else:
@@ -545,22 +534,17 @@ def onValueChange(channel, sampleIndex, val, prev):
         except Exception:
             print(f"    Material: could not read")
 
-    # Dump ALL parameter names on mat_particles so we can find the correct one
+    # Verify wireframe is off
     mat_p = root.op("mat_particles")
     if mat_p:
-        print("")
-        print("  MAT_PARTICLES PARAMETERS (for debugging draw mode):")
         try:
-            all_pars = [p.name for p in mat_p.pars()
-                        if any(kw in p.name.lower()
-                               for kw in ['draw', 'wire', 'fill', 'poly',
-                                          'render', 'point', 'front', 'mode',
-                                          'prim'])]
-            for pn in all_pars:
-                pval = getattr(mat_p.par, pn).eval()
-                print(f"    {pn} = {pval}")
+            wf = mat_p.par.wireframe.eval()
+            cr = mat_p.par.colorr.eval() if hasattr(mat_p.par, 'colorr') else '?'
+            cg = mat_p.par.colorg.eval() if hasattr(mat_p.par, 'colorg') else '?'
+            cb = mat_p.par.colorb.eval() if hasattr(mat_p.par, 'colorb') else '?'
+            print(f"    mat_particles: wireframe={wf}, color=({cr},{cg},{cb})")
         except Exception as e:
-            print(f"    Could not list parameters: {e}")
+            print(f"    mat_particles check error: {e}")
 
     print("")
     print("  NEXT STEPS:")
